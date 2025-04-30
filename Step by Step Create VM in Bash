@@ -1,0 +1,55 @@
+Create the Resource Group:
+Bash
+
+az group create --name learn --location northeurope
+Creates the resource group named learn in the northeurope Azure region (appropriate for Ireland).
+And here is the complete list including that command at the start:
+
+Create the Resource Group:
+
+Bash
+
+az group create --name learn --location northeurope
+Creates the resource group named learn in the northeurope Azure region (appropriate for Ireland).
+Create the Virtual Machine (and associated network resources):
+
+Bash
+
+az vm create --resource-group learn --name my-vm --location northeurope --size Standard_B1s --public-ip-sku Standard --image Ubuntu2204 --admin-username azureuser --generate-ssh-keys
+Creates the Ubuntu VM my-vm within the newly created learn RG and northeurope region, along with default networking components.
+Run Configuration Script on the VM:
+
+Bash
+
+az vm extension set --resource-group learn --vm-name my-vm --name customScript --publisher Microsoft.Azure.Extensions --version 2.1 --settings '{"fileUris":["https://raw.githubusercontent.com/MicrosoftDocs/mslearn-welcome-to-azure/master/configure-nginx.sh"]}' --protected-settings '{"commandToExecute": "./configure-nginx.sh"}'
+Installs and runs the Custom Script Extension on my-vm to download and execute the configure-nginx.sh script.
+Get VM Public IP Address into a Variable:
+
+Bash
+
+IPADDRESS=$(az vm list-ip-addresses --resource-group learn --name my-vm --query "[].virtualMachine.network.publicIpAddresses[0].ipAddress" --output tsv)
+Retrieves the public IP address of my-vm and stores it in the bash shell variable IPADDRESS.
+Verify Network Security Group (NSG) Name:
+
+Bash
+
+az network nsg list --resource-group learn --output table
+Lists Network Security Groups in the learn RG to help confirm the NSG name created in step 2 (likely my-vmNSG).
+List Specific NSG Rules (Filtered View):
+
+Bash
+
+az network nsg rule list --resource-group learn --nsg-name my-vmNSG --query '[].{Name:name, Priority:priority, Port:destinationPortRange, Access:access}' --output table
+Lists specific details (Name, Priority, Port, Access) of the rules within the my-vmNSG Network Security Group.
+Create NSG Rule to Allow HTTP:
+
+Bash
+
+az network nsg rule create --resource-group learn --nsg-name my-vmNSG --name allow-http --priority 100 --protocol tcp --destination-port-range 80 --access Allow --description "Allow incoming HTTP traffic on port 80"
+Creates a new rule named allow-http in my-vmNSG to allow inbound TCP traffic on port 80 (HTTP).
+Delete the Resource Group (and all contained resources):
+
+Bash
+
+az group delete --name learn --yes
+Deletes the entire learn resource group and all resources created within it, skipping the confirmation prompt.
