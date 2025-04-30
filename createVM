@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# --- Configuration Variables ---
+RESOURCE_GROUP_NAME="learn"
+LOCATION="northeurope" # Appropriate location for Ireland
+VM_NAME="my-vm"
+VM_IMAGE="Ubuntu2204"
+VM_SIZE="Standard_B1s" # Common, usually available size
+ADMIN_USERNAME="azureuser"
+NSG_NAME="${VM_NAME}NSG" # Default NSG name pattern
+HTTP_RULE_NAME="allow-http"
+HTTP_RULE_PRIORITY=100
+SCRIPT_URI="https://raw.githubusercontent.com/MicrosoftDocs/mslearn-welcome-to-azure/master/configure-nginx.sh"
+
+# --- Script Execution ---
+
+echo "Step 1: Creating Resource Group: $RESOURCE_GROUP_NAME in $LOCATION..."
+az group create --name "$RESOURCE_GROUP_NAME" --location "$LOCATION"
+
+echo "Step 2: Creating Virtual Machine: $VM_NAME..."
+# This command also creates associated default networking components
+# (Public IP, NIC, VNet, NSG) unless they already exist or are specified differently.
+az vm create \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --name "$VM_NAME" \
+  --location "$LOCATION" \
+  --size "$VM_SIZE" \
+  --image "$VM_IMAGE" \
+  --admin-username "$ADMIN_USERNAME" \
+  --public-ip-sku Standard \
+  --generate-ssh-keys
+
+echo "Step 3: Running Configuration Script (Nginx) on VM: $VM_NAME..."
+# Uses the Custom Script Extension to download and run a configuration script
+az vm extension set \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --vm-name "$VM_NAME" \
+  --name customScript \
+  --publisher Microsoft.Azure.Extensions \
+  --version 2.1 \
+  --settings "{\"fileUris\":[\"$SCRIPT_URI\"]}" \
+  --protected-settings "{\"commandToExecute\": \"./configure-nginx.sh\"}"
+
+echo "Step 4: Getting Public IP Address for VM: $VM_NAME..."
+# Retrieves the public IP and stores it in a variable (optional for script logic, useful for output)
+# Using 'az vm show' is often slightly more direct
+IPADDRESS=$(az vm show -d --resource-group "$RESOURCE_GROUP_NAME" --name "$VM_NAME" --query publicIps --output tsv)
+echo "Public IP Address: $IPADDRESS"
+
+echo "Step 5: Verifying Network Security Group Name (Informational)..."
+# Lists NSGs in the resource group to help confirm the actual name
+# The NSG is usually named automatically based on the VM name, e.g., my-vmNSG
+az network nsg list --resource-group "$RESOURCE_GROUP_NAME" --output table
+
+echo "Step 6: Listing Rules for NSG: $NSG_NAME (Informational)..."
+# Lists specific details of the rules within the NSG
+# Note: If the NSG name is different from the default pattern, adjust NSG_NAME variable above
+az network nsg rule list \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --nsg-name "$NSG_NAME" \
+  --query '[].{Name:name, Priority:priority, Port:destinationPortRange, Access:access}' \
+  --output table
+
+echo "Step 7: Creating NSG Rule to Allow HTTP Traffic..."
+# Creates the inbound rule to allow web traffic on port 80
+# Note: If the NSG name is different from the default pattern, adjust NSG_NAME variable above
+az network nsg rule create \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --nsg-name "$NSG_NAME" \
+  --name "$HTTP_RULE_NAME" \
+  --priority $HTTP_RULE_PRIORITY \
+  --protocol tcp \
+  --destination-port-range 80 \
+  --access Allow \
+  --description "Allow incoming HTTP traffic on port 80"
+
+echo "--- Setup Complete ---"
+echo "You can access the web server at: http://$IPADDRESS"
+echo "To delete all created resources, run:"
+echo "az group delete --name $RESOURCE_GROUP_NAME --yes"
+
+# --- Optional Cleanup Step (Commented out by default) ---
+# echo "Step 8: Deleting Resource Group: $RESOURCE_GROUP_NAME..."
+# Deletes the entire resource group and all resources created within it
+# Uncomment the following line to enable automatic cleanup
+# az group delete --name "$RESOURCE_GROUP_NAME" --yes --no-wait
+
+# echo "Resource group deletion initiated."
